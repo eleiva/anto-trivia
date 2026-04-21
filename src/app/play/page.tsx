@@ -21,18 +21,15 @@ export default function PlayPage() {
     const pid = localStorage.getItem("participant_id");
     const name = localStorage.getItem("participant_name") ?? "";
     const emoji = localStorage.getItem("participant_emoji") ?? "";
-
     if (!pid) {
       router.push("/");
       return;
     }
-
     setParticipantId(pid);
     setParticipantName(name);
     setParticipantEmoji(emoji);
   }, [router]);
 
-  // Always fetch the global active session — don't rely on localStorage session_id
   const activeSessionQuery = trpc.admin.getActiveSession.useQuery(undefined, {
     refetchInterval: 2000,
     enabled: !!participantId,
@@ -49,19 +46,15 @@ export default function PlayPage() {
     },
   });
 
-  // When we get an active session, update sessionId and re-register participant if they aren't in it
   const handleActiveSession = useCallback(async () => {
     if (!activeSessionQuery.data || !participantId || !participantName) return;
     const activeId = activeSessionQuery.data.id;
-
     const storedSid = localStorage.getItem("session_id");
     if (storedSid !== activeId) {
-      // Session changed — clear stale answer state and re-join with same name/emoji
       localStorage.setItem("session_id", activeId);
       setSelectedAnswer(null);
       setHasSubmitted(false);
       setLastQuestionId(null);
-
       if (!joinMutationRef.current) {
         joinMutationRef.current = true;
         const emoji = localStorage.getItem("participant_emoji") ?? "🎵";
@@ -80,13 +73,9 @@ export default function PlayPage() {
     handleActiveSession();
   }, [handleActiveSession]);
 
-  // Poll session state using the resolved sessionId
   const sessionState = trpc.participant.getSessionState.useQuery(
     { sessionId: sessionId! },
-    {
-      enabled: !!sessionId,
-      refetchInterval: 2000,
-    },
+    { enabled: !!sessionId, refetchInterval: 2000 },
   );
 
   const hasAnswered = trpc.participant.hasAnsweredQuestion.useQuery(
@@ -110,7 +99,6 @@ export default function PlayPage() {
     },
   });
 
-  // Reset answer state when question changes
   useEffect(() => {
     const currentQuestionId = sessionState.data?.currentQuestion?.id ?? null;
     if (currentQuestionId && currentQuestionId !== lastQuestionId) {
@@ -146,7 +134,6 @@ export default function PlayPage() {
     if (!selectedAnswer || !participantId || !sessionId) return;
     const question = sessionState.data?.currentQuestion;
     if (!question) return;
-
     submitAnswerMutation.mutate({
       participantId,
       questionId: question.id,
@@ -157,8 +144,21 @@ export default function PlayPage() {
 
   if (!participantId) {
     return (
-      <div className="min-h-dvh bg-[#0f0f1a] flex items-center justify-center">
-        <div className="text-purple-400 text-xl animate-pulse">Cargando...</div>
+      <div
+        style={{
+          minHeight: "100dvh",
+          backgroundColor: "#0a0a14",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <div
+          style={{ color: "#a78bfa", fontSize: "20px" }}
+          className="animate-pulse"
+        >
+          Cargando...
+        </div>
       </div>
     );
   }
@@ -167,28 +167,60 @@ export default function PlayPage() {
   const currentQuestion = sessionState.data?.currentQuestion;
   const alreadyAnswered = hasAnswered.data?.answered ?? hasSubmitted;
 
-  // Sort options alphabetically so order is consistent for everyone
-  const shuffledOptions: string[] = currentQuestion
+  const sortedOptions: string[] = currentQuestion
     ? [...(currentQuestion.options as string[])].sort((a, b) =>
         a.localeCompare(b),
       )
     : [];
 
-  // Session finished
+  // ── Finished ──
   if (session?.status === "finished") {
     return (
-      <main className="min-h-dvh bg-[#0f0f1a] flex flex-col items-center justify-center p-6">
-        <div className="text-center fade-in">
-          <div className="text-8xl mb-8">🏆</div>
-          <h1 className="text-5xl font-black gradient-text mb-4">
+      <main
+        style={{
+          minHeight: "100dvh",
+          backgroundColor: "#0a0a14",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "32px 16px",
+          fontFamily: "system-ui, sans-serif",
+        }}
+      >
+        <div style={{ textAlign: "center" }} className="fade-in">
+          <div style={{ fontSize: "96px", marginBottom: "24px" }}>🏆</div>
+          <h1
+            style={{
+              fontSize: "clamp(2rem,6vw,3.5rem)",
+              fontWeight: 900,
+              background: "linear-gradient(135deg,#c084fc,#7c3aed)",
+              WebkitBackgroundClip: "text",
+              WebkitTextFillColor: "transparent",
+              backgroundClip: "text",
+              marginBottom: "16px",
+            }}
+          >
             ¡Quiz Finalizado!
           </h1>
-          <p className="text-purple-300 text-xl mb-10">
+          <p
+            style={{ color: "#c4b5fd", fontSize: "20px", marginBottom: "40px" }}
+          >
             Gracias por participar, {participantEmoji} {participantName}!
           </p>
           <a
             href="/results"
-            className="inline-block bg-gradient-to-r from-yellow-500 to-amber-500 hover:from-yellow-400 hover:to-amber-400 text-black font-black py-5 px-14 rounded-2xl text-2xl transition-all shadow-2xl hover:shadow-yellow-500/40"
+            style={{
+              display: "inline-block",
+              background: "linear-gradient(135deg,#d97706,#f59e0b)",
+              color: "#000",
+              fontWeight: 900,
+              fontSize: "20px",
+              padding: "20px 56px",
+              borderRadius: "16px",
+              textDecoration: "none",
+              boxShadow: "0 8px 30px rgba(245,158,11,0.4)",
+            }}
           >
             🏆 Ver Resultados
           </a>
@@ -197,235 +229,440 @@ export default function PlayPage() {
     );
   }
 
-  // No active session at all — waiting for admin
+  // ── Waiting screens ──
+  const WaitingScreen = ({ message }: { message: string }) => (
+    <main
+      style={{
+        minHeight: "100dvh",
+        backgroundColor: "#0a0a14",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "32px 16px",
+        fontFamily: "system-ui, sans-serif",
+      }}
+    >
+      <div style={{ textAlign: "center" }} className="fade-in">
+        <div
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "12px",
+            backgroundColor: "#12122a",
+            border: "1.5px solid rgba(139,92,246,0.35)",
+            borderRadius: "999px",
+            padding: "12px 24px",
+            marginBottom: "48px",
+          }}
+        >
+          <span style={{ fontSize: "32px" }}>{participantEmoji}</span>
+          <span style={{ color: "white", fontWeight: 700, fontSize: "18px" }}>
+            {participantName}
+          </span>
+        </div>
+        <div
+          style={{ fontSize: "80px", marginBottom: "32px" }}
+          className="pulse-music"
+        >
+          🎵
+        </div>
+        <h2
+          style={{
+            fontSize: "clamp(1.6rem,4vw,2.4rem)",
+            fontWeight: 800,
+            color: "white",
+            marginBottom: "16px",
+          }}
+        >
+          {message}
+        </h2>
+        <p style={{ color: "#a78bfa", fontSize: "18px", marginBottom: "48px" }}>
+          El administrador activará el quiz en breve
+        </p>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-end",
+            justifyContent: "center",
+            gap: "8px",
+            height: "56px",
+          }}
+        >
+          {[...Array(7)].map((_, i) => (
+            <div
+              key={i}
+              className="animate-bounce"
+              style={{
+                width: "10px",
+                background: "linear-gradient(to top,#6d28d9,#8b5cf6)",
+                borderRadius: "999px",
+                animationDelay: `${i * 100}ms`,
+                height: `${20 + Math.sin(i) * 14}px`,
+              }}
+            />
+          ))}
+        </div>
+      </div>
+    </main>
+  );
+
   if (!activeSessionQuery.data && !activeSessionQuery.isLoading) {
-    return (
-      <main className="min-h-dvh bg-[#0f0f1a] flex flex-col items-center justify-center p-6">
-        <div className="text-center fade-in">
-          <div className="inline-flex items-center gap-3 bg-[#1a1a2e] border border-purple-700/40 rounded-full px-6 py-3 mb-10">
-            <span className="text-3xl">{participantEmoji}</span>
-            <span className="text-white font-bold text-lg">
-              {participantName}
-            </span>
-          </div>
-          <div className="text-7xl mb-8 pulse-music">🎵</div>
-          <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
-            Esperando que el admin inicie el quiz...
-          </h2>
-          <p className="text-purple-400 text-xl">
-            El administrador activará el quiz en breve
-          </p>
-          <div className="flex items-end justify-center gap-2 mt-12 h-14">
-            {[...Array(7)].map((_, i) => (
-              <div
-                key={i}
-                className="w-2.5 bg-gradient-to-t from-purple-700 to-violet-400 rounded-full animate-bounce"
-                style={{
-                  animationDelay: `${i * 100}ms`,
-                  height: `${20 + Math.sin(i) * 15}px`,
-                }}
-              />
-            ))}
-          </div>
-        </div>
-      </main>
-    );
+    return <WaitingScreen message="Esperando que el admin inicie el quiz..." />;
   }
-
-  // Waiting for first question or between questions
   if (!currentQuestion || session?.status === "waiting") {
-    return (
-      <main className="min-h-dvh bg-[#0f0f1a] flex flex-col items-center justify-center p-6">
-        <div className="text-center fade-in">
-          <div className="inline-flex items-center gap-3 bg-[#1a1a2e] border border-purple-700/40 rounded-full px-6 py-3 mb-10">
-            <span className="text-3xl">{participantEmoji}</span>
-            <span className="text-white font-bold text-lg">
-              {participantName}
-            </span>
-          </div>
-
-          <div className="text-7xl mb-8 pulse-music">🎵</div>
-          <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
-            Esperando la siguiente pregunta...
-          </h2>
-          <p className="text-purple-400 text-xl">
-            El administrador activará el quiz en breve
-          </p>
-
-          <div className="flex items-end justify-center gap-2 mt-12 h-14">
-            {[...Array(7)].map((_, i) => (
-              <div
-                key={i}
-                className="w-2.5 bg-gradient-to-t from-purple-700 to-violet-400 rounded-full animate-bounce"
-                style={{
-                  animationDelay: `${i * 100}ms`,
-                  height: `${20 + Math.sin(i) * 15}px`,
-                }}
-              />
-            ))}
-          </div>
-        </div>
-      </main>
-    );
+    return <WaitingScreen message="Esperando la siguiente pregunta..." />;
   }
 
+  // ── Active question ──
   return (
-    <main className="min-h-dvh bg-[#0f0f1a] p-5 flex flex-col items-center justify-start pt-10">
-      <div className="w-full max-w-xl">
+    <main
+      style={{
+        minHeight: "100dvh",
+        backgroundColor: "#0a0a14",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "flex-start",
+        padding: "32px 16px 48px",
+        fontFamily: "system-ui, sans-serif",
+      }}
+    >
+      <div style={{ width: "100%", maxWidth: "560px" }}>
         {/* Player badge */}
-        <div className="flex items-center justify-center mb-8">
-          <div className="inline-flex items-center gap-3 bg-[#1a1a2e] border border-purple-700/40 rounded-full px-6 py-3">
-            <span className="text-3xl">{participantEmoji}</span>
-            <span className="text-white font-bold text-lg">
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "center",
+            marginBottom: "32px",
+          }}
+        >
+          <div
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "12px",
+              backgroundColor: "#12122a",
+              border: "1.5px solid rgba(139,92,246,0.35)",
+              borderRadius: "999px",
+              padding: "10px 24px",
+            }}
+          >
+            <span style={{ fontSize: "28px" }}>{participantEmoji}</span>
+            <span style={{ color: "white", fontWeight: 700, fontSize: "17px" }}>
               {participantName}
             </span>
           </div>
         </div>
 
-        {/* Question Card */}
-        <div className="bg-[#1a1a2e] border border-purple-800/40 rounded-2xl p-8 shadow-xl mb-6 fade-in">
-          <div className="flex items-center justify-between mb-6">
-            <span className="text-purple-400 text-sm font-semibold tracking-wide uppercase">
-              🎵 Pregunta
-            </span>
-            <span className="text-xs text-gray-500 bg-[#0f0f1a] px-3 py-1.5 rounded-full border border-purple-800/30">
-              Escucha el audio
-            </span>
-          </div>
-
-          <h2 className="text-2xl md:text-3xl font-bold text-white mb-8 leading-snug">
-            {currentQuestion.questionText}
-          </h2>
-
-          {/* Audio Player Button */}
-          <button
-            onClick={() => playAudio(currentQuestion.audioFile)}
-            className={`w-full flex items-center justify-center gap-3 py-5 px-6 rounded-2xl font-bold text-lg transition-all mb-8 ${
-              audioPlaying
-                ? "bg-gradient-to-r from-purple-700 to-violet-700 text-white shadow-lg shadow-purple-500/30"
-                : "bg-gradient-to-r from-purple-600/80 to-violet-600/80 hover:from-purple-600 hover:to-violet-600 text-white border border-purple-500/30 hover:shadow-lg hover:shadow-purple-500/20"
-            }`}
-          >
-            {audioPlaying ? (
-              <>
-                <span className="flex items-end gap-0.5 h-6">
-                  {[...Array(5)].map((_, i) => (
-                    <span
-                      key={i}
-                      className="w-1 bg-white rounded-full animate-bounce"
-                      style={{
-                        animationDelay: `${i * 80}ms`,
-                        height: `${12 + Math.sin(i * 1.2) * 8}px`,
-                      }}
-                    />
-                  ))}
-                </span>
-                <span>Reproduciendo... (toca para detener)</span>
-              </>
-            ) : (
-              <>
-                <span className="text-2xl">▶</span>
-                <span>Reproducir Audio</span>
-              </>
-            )}
-          </button>
-
-          {/* Answer Options */}
-          {!alreadyAnswered ? (
-            <div className="space-y-3">
-              <p className="text-purple-300 text-sm font-semibold tracking-wide uppercase mb-4">
-                Selecciona tu respuesta:
-              </p>
-              {shuffledOptions.map((option) => (
-                <button
-                  key={option}
-                  onClick={() => setSelectedAnswer(option)}
-                  disabled={submitAnswerMutation.isPending}
-                  className={`w-full text-left pl-6 pr-5 py-5 rounded-2xl border-2 font-medium text-lg transition-all ${
-                    selectedAnswer === option
-                      ? "border-purple-500 bg-purple-900/50 text-white shadow-lg shadow-purple-500/20"
-                      : "border-purple-800/40 bg-[#0f0f1a]/60 text-gray-300 hover:border-purple-600/60 hover:bg-purple-900/20 hover:text-white"
-                  }`}
+        {/* Question card */}
+        <div
+          style={{
+            backgroundColor: "#12122a",
+            border: "1.5px solid rgba(139,92,246,0.3)",
+            borderRadius: "24px",
+            padding: "36px 32px",
+            boxShadow: "0 8px 40px rgba(124,58,237,0.18)",
+          }}
+          className="fade-in"
+        >
+          {/* Card header + question + audio — only shown before answering */}
+          {!alreadyAnswered && (
+            <>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  marginBottom: "20px",
+                }}
+              >
+                <span
+                  style={{
+                    color: "#a855f7",
+                    fontSize: "13px",
+                    fontWeight: 700,
+                    letterSpacing: "0.08em",
+                    textTransform: "uppercase",
+                  }}
                 >
-                  <span className="flex items-center gap-4">
-                    <span
-                      className={`w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${
-                        selectedAnswer === option
-                          ? "border-purple-400 bg-purple-500"
-                          : "border-gray-600"
-                      }`}
-                    >
-                      {selectedAnswer === option && (
-                        <span className="w-2 h-2 bg-white rounded-full" />
-                      )}
-                    </span>
-                    {option}
-                  </span>
-                </button>
-              ))}
+                  🎵 Pregunta
+                </span>
+                <span
+                  style={{
+                    color: "#6b7280",
+                    fontSize: "12px",
+                    backgroundColor: "#0a0a14",
+                    border: "1px solid rgba(139,92,246,0.2)",
+                    borderRadius: "999px",
+                    padding: "4px 12px",
+                  }}
+                >
+                  Escucha el audio
+                </span>
+              </div>
+
+              <h2
+                style={{
+                  color: "white",
+                  fontSize: "clamp(1.5rem,4vw,2rem)",
+                  fontWeight: 800,
+                  lineHeight: 1.3,
+                  marginBottom: "28px",
+                }}
+              >
+                {currentQuestion.questionText}
+              </h2>
 
               <button
-                onClick={handleSubmit}
-                disabled={!selectedAnswer || submitAnswerMutation.isPending}
-                className="w-full mt-5 bg-gradient-to-r from-purple-600 to-violet-600 hover:from-purple-500 hover:to-violet-500 disabled:from-gray-700 disabled:to-gray-700 disabled:cursor-not-allowed text-white font-bold py-5 px-6 rounded-2xl transition-all duration-200 shadow-lg hover:shadow-purple-500/25 text-lg"
+                onClick={() => playAudio(currentQuestion.audioFile)}
+                style={{
+                  width: "100%",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "12px",
+                  padding: "18px 24px",
+                  borderRadius: "16px",
+                  border: "none",
+                  background: audioPlaying
+                    ? "linear-gradient(135deg,#6d28d9,#7c3aed)"
+                    : "linear-gradient(135deg,#7c3aed,#a855f7)",
+                  color: "white",
+                  fontWeight: 700,
+                  fontSize: "17px",
+                  cursor: "pointer",
+                  marginBottom: "32px",
+                  boxShadow: "0 4px 20px rgba(124,58,237,0.35)",
+                  transition: "all 0.2s",
+                }}
               >
-                {submitAnswerMutation.isPending ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <svg
-                      className="animate-spin h-5 w-5"
-                      viewBox="0 0 24 24"
-                      fill="none"
+                {audioPlaying ? (
+                  <>
+                    <span
+                      style={{
+                        display: "flex",
+                        alignItems: "flex-end",
+                        gap: "3px",
+                        height: "22px",
+                      }}
                     >
-                      <circle
-                        className="opacity-25"
-                        cx="12"
-                        cy="12"
-                        r="10"
-                        stroke="currentColor"
-                        strokeWidth="4"
-                      />
-                      <path
-                        className="opacity-75"
-                        fill="currentColor"
-                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                      />
-                    </svg>
-                    Enviando...
-                  </span>
+                      {[...Array(5)].map((_, i) => (
+                        <span
+                          key={i}
+                          className="animate-bounce"
+                          style={{
+                            width: "4px",
+                            backgroundColor: "white",
+                            borderRadius: "999px",
+                            display: "inline-block",
+                            animationDelay: `${i * 80}ms`,
+                            height: `${10 + Math.sin(i * 1.2) * 8}px`,
+                          }}
+                        />
+                      ))}
+                    </span>
+                    <span>Reproduciendo... (toca para detener)</span>
+                  </>
                 ) : (
-                  "Confirmar respuesta ✓"
+                  <>
+                    <span style={{ fontSize: "20px" }}>▶</span>
+                    <span>Reproducir Audio</span>
+                  </>
                 )}
               </button>
+            </>
+          )}
 
-              {submitAnswerMutation.isError && (
-                <div className="bg-red-900/30 border border-red-700/50 rounded-lg px-4 py-3 text-red-300 text-sm text-center">
-                  Error al enviar. Intenta de nuevo.
-                </div>
-              )}
-            </div>
-          ) : (
-            /* Already answered — neutral waiting state, no correct/incorrect feedback */
-            <div className="text-center py-10 fade-in">
-              <div className="text-6xl mb-6">🎵</div>
-              <h3 className="text-3xl font-black text-white mb-3">
+          {/* Answered / options */}
+          {alreadyAnswered ? (
+            <div
+              style={{ textAlign: "center", padding: "32px 0 16px" }}
+              className="fade-in"
+            >
+              <div style={{ fontSize: "72px", marginBottom: "20px" }}>🎵</div>
+              <h3
+                style={{
+                  color: "white",
+                  fontSize: "28px",
+                  fontWeight: 900,
+                  marginBottom: "12px",
+                }}
+              >
                 ¡Respuesta enviada!
               </h3>
-              <p className="text-purple-300 text-lg mb-10">
+              <p
+                style={{
+                  color: "#a78bfa",
+                  fontSize: "17px",
+                  marginBottom: "40px",
+                }}
+              >
                 Esperando la siguiente pregunta...
               </p>
-
-              <div className="flex items-end justify-center gap-2 h-10">
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "flex-end",
+                  justifyContent: "center",
+                  gap: "6px",
+                  height: "40px",
+                }}
+              >
                 {[...Array(5)].map((_, i) => (
                   <div
                     key={i}
-                    className="w-2 bg-gradient-to-t from-purple-700 to-violet-400 rounded-full animate-bounce"
+                    className="animate-bounce"
                     style={{
+                      width: "8px",
+                      background: "linear-gradient(to top,#6d28d9,#8b5cf6)",
+                      borderRadius: "999px",
                       animationDelay: `${i * 120}ms`,
                       height: `${14 + Math.sin(i) * 10}px`,
                     }}
                   />
                 ))}
               </div>
+            </div>
+          ) : (
+            <div>
+              <p
+                style={{
+                  color: "#c4b5fd",
+                  fontSize: "13px",
+                  fontWeight: 700,
+                  letterSpacing: "0.08em",
+                  textTransform: "uppercase",
+                  marginBottom: "16px",
+                }}
+              >
+                Selecciona tu respuesta:
+              </p>
+
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "12px",
+                }}
+              >
+                {sortedOptions.map((option) => {
+                  const isSelected = selectedAnswer === option;
+                  return (
+                    <button
+                      key={option}
+                      onClick={() => setSelectedAnswer(option)}
+                      disabled={submitAnswerMutation.isPending}
+                      style={{
+                        width: "100%",
+                        textAlign: "left",
+                        padding: "18px 20px",
+                        borderRadius: "14px",
+                        border: isSelected
+                          ? "2px solid #a855f7"
+                          : "2px solid rgba(139,92,246,0.25)",
+                        backgroundColor: isSelected
+                          ? "rgba(168,85,247,0.15)"
+                          : "rgba(255,255,255,0.03)",
+                        color: isSelected ? "white" : "#d1d5db",
+                        fontSize: "17px",
+                        fontWeight: isSelected ? 700 : 500,
+                        cursor: "pointer",
+                        transition: "all 0.15s",
+                        boxShadow: isSelected
+                          ? "0 0 0 4px rgba(168,85,247,0.1)"
+                          : "none",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "16px",
+                      }}
+                    >
+                      {/* Radio dot */}
+                      <span
+                        style={{
+                          width: "22px",
+                          height: "22px",
+                          borderRadius: "50%",
+                          border: isSelected
+                            ? "2px solid #a855f7"
+                            : "2px solid #4b5563",
+                          backgroundColor: isSelected
+                            ? "#a855f7"
+                            : "transparent",
+                          flexShrink: 0,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          transition: "all 0.15s",
+                        }}
+                      >
+                        {isSelected && (
+                          <span
+                            style={{
+                              width: "8px",
+                              height: "8px",
+                              borderRadius: "50%",
+                              backgroundColor: "white",
+                              display: "block",
+                            }}
+                          />
+                        )}
+                      </span>
+                      {option}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Submit button */}
+              <button
+                onClick={handleSubmit}
+                disabled={!selectedAnswer || submitAnswerMutation.isPending}
+                style={{
+                  width: "100%",
+                  marginTop: "20px",
+                  padding: "18px",
+                  borderRadius: "14px",
+                  border: "none",
+                  background:
+                    !selectedAnswer || submitAnswerMutation.isPending
+                      ? "linear-gradient(135deg,#374151,#4b5563)"
+                      : "linear-gradient(135deg,#7c3aed,#a855f7)",
+                  color: "white",
+                  fontWeight: 800,
+                  fontSize: "17px",
+                  cursor:
+                    !selectedAnswer || submitAnswerMutation.isPending
+                      ? "not-allowed"
+                      : "pointer",
+                  boxShadow: !selectedAnswer
+                    ? "none"
+                    : "0 4px 20px rgba(124,58,237,0.35)",
+                  transition: "all 0.2s",
+                  letterSpacing: "0.02em",
+                }}
+              >
+                {submitAnswerMutation.isPending
+                  ? "Enviando..."
+                  : "Confirmar respuesta ✓"}
+              </button>
+
+              {submitAnswerMutation.isError && (
+                <div
+                  style={{
+                    marginTop: "12px",
+                    backgroundColor: "rgba(239,68,68,0.12)",
+                    border: "1px solid rgba(239,68,68,0.4)",
+                    borderRadius: "10px",
+                    padding: "12px 16px",
+                    color: "#fca5a5",
+                    fontSize: "14px",
+                    textAlign: "center",
+                  }}
+                >
+                  Error al enviar. Intenta de nuevo.
+                </div>
+              )}
             </div>
           )}
         </div>
